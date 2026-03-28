@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Hachihi QR</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      display: flex;
+      height: 100vh;
+    }
+
+    .left {
+      width: 380px;
+      padding: 20px;
+      background: #020617;
+      border-right: 1px solid #1e293b;
+      overflow-y: auto;
+    }
+
+    .right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at top, #1e293b, #020617);
+    }
+
+    h1 {
+      font-size: 20px;
+      margin-bottom: 15px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      background: #1e293b;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .active {
+      background: #38bdf8;
+      color: black;
+      font-weight: bold;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 6px;
+      border: none;
+      background: #1e293b;
+      color: white;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(90deg, #38bdf8, #22c55e);
+      color: black;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    canvas {
+      background: white;
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .download {
+      margin-top: 10px;
+      background: #38bdf8;
+      padding: 10px 20px;
+      border-radius: 6px;
+      text-decoration: none;
+      color: black;
+    }
+
+    #history {
+      margin-top: 20px;
+      font-size: 12px;
+    }
+
+    #history div {
+      border-bottom: 1px solid #1e293b;
+      padding: 5px 0;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="left">
+
+  <h1>⚡ Hachihi QR</h1>
+
+  <div class="tabs">
+    <div class="tab active" onclick="setMode('link', this)">Link</div>
+    <div class="tab" onclick="setMode('wifi', this)">WiFi</div>
+    <div class="tab" onclick="setMode('payment', this)">Thanh toán</div>
+  </div>
+
+  <!-- LINK -->
+  <div id="linkBox">
+    <input id="content" placeholder="https://..." />
+  </div>
+
+  <!-- WIFI -->
+  <div id="wifiBox" style="display:none;">
+    <input id="ssid" placeholder="Tên WiFi" />
+    <input id="password" placeholder="Mật khẩu" />
+  </div>
+
+  <!-- PAYMENT -->
+  <div id="paymentBox" style="display:none;">
+    <input id="bankId" placeholder="vietinbank / mb / acb..." />
+    <input id="accountNo" placeholder="Số tài khoản" />
+    <input id="accountName" placeholder="Tên tài khoản" />
+    <input id="amount" placeholder="Số tiền" />
+    <input id="description" placeholder="Nội dung CK" />
+
+    <select id="template">
+      <option value="compact">compact</option>
+      <option value="compact2">compact2</option>
+      <option value="qr_only">qr_only</option>
+    </select>
+  </div>
+
+  <input type="range" min="2" max="10" value="5" id="sizeSlider">
+
+  <button class="btn" onclick="generate()">Tạo QR</button>
+
+  <div id="history"></div>
+
+</div>
+
+<div class="right">
+
+  <canvas id="canvas"></canvas>
+  <a id="downloadBtn" class="download">Tải ảnh</a>
+
+</div>
+
+<script>
+
+let mode = "link";
+const API = "https://YOUR-WORKER.workers.dev"; // 🔥 thay link của bạn
+
+function setMode(m, el) {
+  mode = m;
+
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  el.classList.add("active");
+
+  linkBox.style.display = m === "link" ? "block" : "none";
+  wifiBox.style.display = m === "wifi" ? "block" : "none";
+  paymentBox.style.display = m === "payment" ? "block" : "none";
+}
+
+function generate() {
+
+  const size = sizeSlider.value * 100;
+  let content = "";
+  let qrUrl = "";
+
+  if (mode === "wifi") {
+    content = `WIFI:T:WPA;S:${ssid.value};P:${password.value};;`;
+  }
+
+  if (mode === "link") {
+    content = contentInput();
+  }
+
+  if (mode === "payment") {
+    const name = encodeURIComponent(accountName.value);
+    const des = encodeURIComponent(description.value);
+
+    qrUrl = `https://img.vietqr.io/image/${bankId.value}-${accountNo.value}-${template.value}.png?amount=${amount.value}&addInfo=${des}&accountName=${name}`;
+  }
+
+  if (!qrUrl) {
+    qrUrl = `https://quickchart.io/qr?size=${size}&text=${encodeURIComponent(content)}`;
+  }
+
+  renderQR(qrUrl, size);
+
+  // 🔥 lưu lịch sử
+  fetch(API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      content: content || qrUrl,
+      type: mode,
+      size: size + "x" + size
+    })
+  });
+
+}
+
+function contentInput() {
+  let c = document.getElementById("content").value;
+  if (!/^(https?:\/\/|mailto:|tel:)/.test(c)) {
+    c = "http://" + c;
+  }
+  return c;
+}
+
+function renderQR(url, size) {
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.src = url;
+
+  img.onload = () => {
+    canvas.width = size;
+    canvas.height = size;
+    canvas.getContext("2d").drawImage(img, 0, 0, size, size);
+
+    const data = canvas.toDataURL();
+    downloadBtn.href = data;
+    downloadBtn.download = "hachihi_qr.png";
+  };
+}
+
+async function loadHistory() {
+  const res = await fetch(API);
+  const data = await res.json();
+
+  history.innerHTML = "";
+
+  data.forEach(item => {
+    const div = document.createElement("div");
+    div.innerText = `${item.type} - ${item.content}`;
+    div.onclick = () => {
+      alert(item.content);
+    };
+    history.appendChild(div);
+  });
+}
+
+loadHistory();
+
+</script>
+
+</body>
+</html>
